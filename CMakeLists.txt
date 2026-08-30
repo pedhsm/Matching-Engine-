@@ -23,9 +23,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ---------------------------------------------------------------------------
 find_package(cppzmq CONFIG QUIET)
 
+# Threads: a thread de drain do AsyncJournal (Fase B) usa std::thread.
+find_package(Threads REQUIRED)
+
 file(GLOB ENGINE_SOURCES "engine/src/*.cpp")
 add_executable(mstly_engine src/main.cpp ${ENGINE_SOURCES})
 target_include_directories(mstly_engine PRIVATE engine/include)
+target_link_libraries(mstly_engine PRIVATE Threads::Threads)
 
 if(TARGET cppzmq)
     message(STATUS "ZMQ: using cppzmq CONFIG package")
@@ -41,3 +45,22 @@ else()
     target_include_directories(mstly_engine PRIVATE ${ZMQ_INCLUDE_DIR})
     target_link_libraries(mstly_engine PRIVATE ${ZMQ_LIBRARY})
 endif()
+
+# ---------------------------------------------------------------------------
+# Testes (CTest). Nao dependem de ZMQ: cada um linka so' o que precisa, entao
+# `ctest` roda mesmo sem a libzmq instalada.
+#   test_core     -> nucleo do matching (so' MatchingEngine)
+#   test_journal  -> Fase B (AsyncJournal + ArenaAllocator + threads)
+# ---------------------------------------------------------------------------
+enable_testing()
+
+add_executable(test_core tests/test_core.cpp engine/src/MatchingEngine.cpp)
+target_include_directories(test_core PRIVATE engine/include)
+add_test(NAME core COMMAND test_core)
+
+add_executable(test_journal tests/test_journal.cpp
+                            engine/src/AsyncJournal.cpp
+                            engine/src/ArenaAllocator.cpp)
+target_include_directories(test_journal PRIVATE engine/include)
+target_link_libraries(test_journal PRIVATE Threads::Threads)
+add_test(NAME journal COMMAND test_journal)

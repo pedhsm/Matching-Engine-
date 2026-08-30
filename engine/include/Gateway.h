@@ -4,6 +4,7 @@
 #include <zmq.hpp>
 
 #include "CommandProcessor.h"
+#include "AsyncJournal.h"
 
 // =============================================================================
 //  Gateway — ADAPTADOR DE REDE (Fase 7). Vive FORA do nucleo.
@@ -30,7 +31,8 @@
 class Gateway {
 public:
     Gateway(const std::string& pull_endpoint = "tcp://*:5555",
-            const std::string& pub_endpoint  = "tcp://*:5556");
+            const std::string& pub_endpoint  = "tcp://*:5556",
+            const std::string& journal_path  = "journal.tsv");
 
     // Loop de servico: recebe 1 comando por mensagem no PULL, roda no
     // CommandProcessor (que publica cada evento no PUB via sink). Bloqueante.
@@ -41,7 +43,8 @@ private:
     void publicar(const std::string& linha);  // sink: envia a linha pelo PUB
 
     zmq::context_t  ctx_;
-    zmq::socket_t   pull_;   // entrada de comandos (order entry)
-    zmq::socket_t   pub_;    // saida de eventos (market data)
-    CommandProcessor proc_;  // parser+engine; sink -> publicar()
+    zmq::socket_t   pull_;    // entrada de comandos (order entry)
+    zmq::socket_t   pub_;     // saida de eventos (market data)
+    AsyncJournal    journal_; // Fase B: journaling assincrono (feed + eventos)
+    CommandProcessor proc_;   // parser+engine; sink -> publicar()
 };

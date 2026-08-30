@@ -2,10 +2,12 @@
 #include <iostream>
 #include <stdexcept>
 
-Gateway::Gateway(const std::string& pull_endpoint, const std::string& pub_endpoint)
+Gateway::Gateway(const std::string& pull_endpoint, const std::string& pub_endpoint,
+                 const std::string& journal_path)
     : ctx_(1),
       pull_(ctx_, zmq::socket_type::pull),
       pub_(ctx_, zmq::socket_type::pub),
+      journal_(journal_path),
       proc_([this](const std::string& msg) { this->publicar(msg); }) {
     
     try {
@@ -42,11 +44,14 @@ void Gateway::run() {
             break;
         }
 
+        if (!command.empty()) journal_.record("IN", command);  // registra o feed (Fase B)
         proc_.process_line(command);
     }
 }
 
 void Gateway::publicar(const std::string& linha) {
+    journal_.record("EV", linha);  // registra o evento no journal (Fase B) alem de publicar
+
     // Adiciona newline para facilitar a leitura no cliente
     std::string msg = linha + "\n";
     zmq::message_t reply(msg.size());
