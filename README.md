@@ -108,25 +108,34 @@ O enunciado pede `O(N)` — que é um teto **fraco**. O anti-padrão a evitar é
 - **Gateway ZMQ:** `PULL tcp://*:5555` = *order-entry gateway* (entrada de ordens); `PUB tcp://*:5556` = *market-data feed* (broadcast dos eventos). Espelha a separação de uma exchange real entre canal de ordens e feed de dados. *(PUB/SUB tem "slow joiner": suba o listener antes do feeder.)*
 
 ### Histórico em disco (journaling)
-- **Fase A (implementada):** todo o feed e todos os eventos são gravados em `journal.tsv` via `std::ofstream` bufferizado — consulta posterior no pandas (`pd.read_csv("journal.tsv", sep="\t")`). No caminho síncrono, o próprio `ofstream` já batela as escritas em blocos.
-- **Fase B (projetada):** para não bloquear o caminho quente no I/O, o design previsto é um **ping-pong de dois `ArenaAllocator`** + uma **thread de drain**: o hot-path preenche a arena A; ao encher, entrega A para a thread gravar em disco enquanto já preenche a B; troca e reseta. É onde a arena se justifica (o `ofstream` síncrono já basta na Fase A). O tratamento de *backpressure* (o que fazer se o drain não terminou antes de a segunda arena encher) é a parte delicada. O esqueleto do `ArenaAllocator` está em `engine/include/ArenaAllocator.h`.
+Todo o feed (comandos `IN`) e todos os eventos (`EV`) são gravados num `journal.tsv` append-only — formato TSV para cair direto no pandas (`pd.read_csv("journal.tsv", sep="\t", names=["kind","payload"])`). Duas implementações coexistem, mostrando a evolução de latência:
+
+- **Fase A — síncrona (`Journal`, `engine/include/Journal.h`):** `record()` escreve direto num `std::ofstream` bufferizado. Simples e correto, mas o I/O de disco acontece **na mesma thread que casa ordens** — cada `record` pode bloquear o caminho quente.
+- **Fase B — assíncrona (`AsyncJournal`, o default hoje):** tira o I/O do hot-path. O `record()` só faz um **`memcpy` numa arena em memória** (~O(1), zero syscall); uma **thread de drain** separada é quem grava em disco. O mecanismo é um **ping-pong de dois `ArenaAllocator`**: o produtor preenche a arena ativa; quando ela enche, entrega-a para a fila de drain e passa a preencher a outra; a thread grava a arena cheia **fora de qualquer lock**, faz `resetar()` O(1) e a devolve ao pool.
+  - **Backpressure (a parte delicada):** se o produtor enche a arena ativa e a outra ainda não foi drenada (disco lento), o produtor **bloqueia até uma arena ficar livre**. É a escolha correta para um log de *auditoria*: preferimos uma pausa rara a **perder um evento** — as alternativas (descartar = perde auditoria; alocar arenas sem limite = risco de OOM) são piores. Dimensionando a arena para caber uma rajada típica (64 KiB por padrão), o bloqueio praticamente nunca ocorre.
+  - **Invariante-chave:** o produtor **nunca** escreve no arquivo — só preenche arenas e as entrega. Toda escrita passa pela thread de drain, na ordem FIFO da fila ⇒ a ordem dos eventos no disco é idêntica à ordem em que chegaram. O teste `tests/test_journal.cpp` prova isso sob estresse (arenas minúsculas → milhares de rotações + backpressure; confere que nenhuma linha se perde e a ordem se mantém).
+  - Está ligada nos **dois modos**: no REPL e no gateway ZMQ (que antes nem jornalizava).
 
 ---
 
 ## Testes
-`tests/test_core.cpp` exercita o núcleo com um *sink* coletor, reproduzindo o exemplo do enunciado (matching), o `print_book`, e a limit marketable, com verificação linha a linha.
+Dois alvos, registrados no CTest (`ctest --test-dir build`):
+- `tests/test_core.cpp` — exercita o **núcleo** com um *sink* coletor: o exemplo do enunciado (matching), o `print_book` e a limit marketable, com verificação linha a linha.
+- `tests/test_journal.cpp` — exercita a **Fase B** (`AsyncJournal`) sob estresse: arenas minúsculas forçam milhares de rotações e backpressure, e o teste relê o arquivo para provar que **nenhum evento se perde e a ordem é preservada** (mais o caso de fallback da linha maior que a arena).
 
 ## Limitações (escopo consciente)
-Um único ativo; matching single-thread; sem persistência perene além do journal; sem checagem de risco/autenticação; a Fase B do journaling está documentada, não implementada. São cortes deliberados para o escopo do exercício.
+Um único ativo; matching single-thread; sem persistência perene além do journal; sem checagem de risco/autenticação. São cortes deliberados para o escopo do exercício.
 
 ---
 
 ## Layout do repositório
 ```
-engine/include/   DataStructure.h  MatchingEngine.h  CommandProcessor.h  Gateway.h  Journal.h  ArenaAllocator.h
-engine/src/       MatchingEngine.cpp  CommandProcessor.cpp  Gateway.cpp  ArenaAllocator.cpp
+engine/include/   DataStructure.h  MatchingEngine.h  CommandProcessor.h  Gateway.h
+                  Journal.h (Fase A)  AsyncJournal.h (Fase B)  ArenaAllocator.h
+engine/src/       MatchingEngine.cpp  CommandProcessor.cpp  Gateway.cpp
+                  AsyncJournal.cpp  ArenaAllocator.cpp
 src/              main.cpp        # ponto de entrada (repl | zmq)
-tests/            test_core.cpp
+tests/            test_core.cpp   test_journal.cpp
 feeder.py         # cliente PUSH de exemplo para o modo ZMQ
 CMakeLists.txt  vcpkg.json
 ```
