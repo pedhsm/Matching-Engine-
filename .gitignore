@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Sensitive / non-deliverable files (this repo is shared with an employer)
+# ---------------------------------------------------------------------------
+*.pdf
+claude_convo.jsonl
+claude_readable.md
+parse.py
+Morgan_Stanley_Prep.md
+
+# ---------------------------------------------------------------------------
+# Journal output (runtime artifact — not source)
+# ---------------------------------------------------------------------------
+journal*.tsv
+journal*.csv
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+/build/
+build*/
+out/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+*.obj
+*.o
+*.exe
+*.lib
+*.a
+*.dll
+*.pdb
+*.ilk
+*.exp
+
+# ---------------------------------------------------------------------------
+# Package managers / toolchains (self-contained, must not be committed)
+# ---------------------------------------------------------------------------
+vcpkg/
+vcpkg_installed/
+
+# ---------------------------------------------------------------------------
+# Editor / OS cruft
+# ---------------------------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

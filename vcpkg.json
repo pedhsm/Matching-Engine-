@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "mstly-matching-engine",
+  "version-string": "0.0.1",
+  "description": "Matching engine - build foundation. ZeroMQ transport smoke test.",
+  "dependencies": [
+    "zeromq",
+    "cppzmq"
+  ]
+}
