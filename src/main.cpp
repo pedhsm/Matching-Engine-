@@ -3,7 +3,7 @@
 
 #include "../engine/include/CommandProcessor.h"
 #include "../engine/include/Gateway.h"
-#include "../engine/include/Journal.h"
+#include "../engine/include/AsyncJournal.h"  // Fase B (assincrono, ping-pong + drain)
 
 // ---------------------------------------------------------------------------
 //  Ponto de entrada. Dois modos, MESMO parser (CommandProcessor) nos dois:
@@ -14,9 +14,9 @@
 // ---------------------------------------------------------------------------
 
 // Modo terminal: cada evento vira uma linha no stdout, e tudo (feed + eventos)
-// é jornalizado em disco (Fase A) pra consulta posterior no pandas.
+// é jornalizado em disco (Fase B: assíncrono) pra consulta posterior no pandas.
 static int run_repl() {
-    Journal journal("journal.tsv");
+    AsyncJournal journal("journal.tsv");
     // O sink é o MESMO evento indo pra dois "renderers": o terminal e o journal.
     CommandProcessor cp([&journal](const std::string& s) {
         std::cout << s << "\n";
