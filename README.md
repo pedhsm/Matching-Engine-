@@ -191,7 +191,7 @@ Dois alvos, registrados no CTest (`ctest --test-dir build`):
 ```
 
 ## Limitações (escopo consciente)
-Um único ativo; matching single-thread; sem persistência perene além do journal; sem checagem de risco/autenticação. São cortes deliberados para o escopo do exercício.
+**Um único ativo é especificação do enunciado**, não uma limitação — a arquitetura suportaria *multi-asset* com um book por símbolo, sem mudança estrutural. Cortes conscientes de fato, deliberados para o escopo do exercício: matching single-thread (evita locks no caminho quente), sem persistência perene além do journal, e sem checagem de risco/autenticação.
 
 ---
 
