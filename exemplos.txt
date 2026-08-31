@@ -1,0 +1,33 @@
+# ===== exemplos de comandos da matching engine =====
+# Rode SEM a parte live (só o núcleo, via REPL):
+#   Linux/macOS :  ./mstly_engine.exe repl < exemplos.txt
+#   Windows PS  :  Get-Content exemplos.txt | .\mstly_engine.exe repl
+#
+# Linhas começadas com '#' são ignoradas pelo parser.
+# Os ids (0,1,2...) são atribuídos na ordem em que as ordens DESCANSAM no book.
+
+# --- ordens limit que descansam no book ---
+limit buy 100.00 200
+limit sell 101.00 150
+print book
+
+# --- market: casa contra o topo do lado oposto ---
+market buy 50
+
+# --- limit "marketable": cruza o book e o que sobra descansa ---
+limit sell 99.50 100
+print book
+
+# --- cancelar uma ordem pelo id (aqui o id 1 = a sell 101) ---
+cancel order 1
+print book
+
+# --- modificar: preço, e depois qty (aumentar qty perde prioridade-tempo) ---
+limit buy 98.00 300
+modify order 2 price 99.00
+modify order 2 qty 500
+print book
+
+# --- ordem pegged: acompanha o melhor bid/offer ---
+peg offer sell 60
+print book
