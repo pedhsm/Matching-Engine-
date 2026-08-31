@@ -9,6 +9,7 @@
 #include "MatchingEngine.h"
 
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -154,10 +155,90 @@ static void teste_marketable_limit() {
 }
 
 // =============================================================================
-//  Teste 4 — format_price (funcao pura, casos de borda)
+//  Teste 4 — modify (exemplo EXATO do enunciado): alteracao de preco recoloca a
+//  ordem na faixa certa e PERDE prioridade-tempo. Reproduz o livro do e-mail.
+// =============================================================================
+static void teste_modify_enunciado() {
+    std::cout << "\n== Teste 4: modify do enunciado (perde prioridade) ==\n";
+    Coletor c;
+    MatchingEngine eng(c.sink());
+
+    // Livro do enunciado: bids 200@10 e 100@9.99 | ask 100@10.5
+    const int64_t id0 = eng.on_limit_order(Side::BUY,  1000, 200);  // 10.00
+    eng.on_limit_order(Side::BUY,   999, 100);                      // 9.99
+    eng.on_limit_order(Side::SELL, 1050, 100);                      // 10.50
+    c.drain();
+
+    eng.print_book();
+    checa("book antes do modify", c.drain(), {
+        "Ordens de Compra | Ordens de Venda",
+        "-----------------|-----------------",
+        "200 @ 10         | 100 @ 10.5",
+        "100 @ 9.99       |",
+    });
+
+    // Altera a 1a ordem de compra (200@10) para 9.98 -> cai ABAIXO da 100@9.99.
+    eng.modify(static_cast<uint64_t>(id0), 998, std::nullopt);
+    c.drain();
+
+    eng.print_book();
+    checa("book depois do modify (200@10 -> 9.98, perdeu prioridade)", c.drain(), {
+        "Ordens de Compra | Ordens de Venda",
+        "-----------------|-----------------",
+        "100 @ 9.99       | 100 @ 10.5",
+        "200 @ 9.98       |",
+    });
+}
+
+// =============================================================================
+//  Teste 5 — pegged (exemplo EXATO do enunciado): 'peg to bid' acompanha o melhor
+//  bid E preserva o timestamp, ficando a' frente de uma limit que chega depois no
+//  mesmo preco. Este e' o caso mais sutil do enunciado.
+// =============================================================================
+static void teste_pegged_enunciado() {
+    std::cout << "\n== Teste 5: pegged do enunciado (peg to bid) ==\n";
+    Coletor c;
+    MatchingEngine eng(c.sink());
+
+    eng.on_limit_order(Side::BUY,  1000, 200);  // 10.00
+    eng.on_limit_order(Side::BUY,   999, 100);  // 9.99
+    eng.on_limit_order(Side::SELL, 1050, 100);  // 10.50
+    c.drain();
+
+    // peg bid buy 150 -> entra no melhor bid (10), ATRAS da 200@10 (chegou antes).
+    eng.on_pegged_order(Side::BUY, 150, /*peg_to_bid=*/true);
+    c.drain();
+
+    eng.print_book();
+    checa("book apos peg bid buy 150", c.drain(), {
+        "Ordens de Compra | Ordens de Venda",
+        "-----------------|-----------------",
+        "200 @ 10         | 100 @ 10.5",
+        "150 @ 10         |",
+        "100 @ 9.99       |",
+    });
+
+    // limit buy 10.1 300 -> novo melhor bid. A pegged sobe pra 10.1 e, por PRESERVAR
+    // o timestamp, fica A' FRENTE da limit nova (300) no mesmo nivel 10.1.
+    eng.on_limit_order(Side::BUY, 1010, 300);  // 10.10
+    c.drain();
+
+    eng.print_book();
+    checa("book apos limit buy 10.1 300 (pegged acompanha e mantem prioridade)", c.drain(), {
+        "Ordens de Compra | Ordens de Venda",
+        "-----------------|-----------------",
+        "150 @ 10.1       | 100 @ 10.5",
+        "300 @ 10.1       |",
+        "200 @ 10         |",
+        "100 @ 9.99       |",
+    });
+}
+
+// =============================================================================
+//  Teste 6 — format_price (funcao pura, casos de borda)
 // =============================================================================
 static void teste_format_price() {
-    std::cout << "\n== Teste 4: format_price ==\n";
+    std::cout << "\n== Teste 6: format_price ==\n";
     struct Caso { uint32_t centavos; const char* esperado; };
     const Caso casos[] = {
         {1000, "10"}, {1050, "10.5"}, {999, "9.99"},
@@ -180,6 +261,8 @@ int main() {
     teste_cenario_do_email();
     teste_print_book();
     teste_marketable_limit();
+    teste_modify_enunciado();
+    teste_pegged_enunciado();
     teste_format_price();
 
     std::cout << "\n===== RESUMO: " << g_pass << "/" << g_total
